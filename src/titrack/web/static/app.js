@@ -948,10 +948,11 @@ function renderActiveRun(data, forceRender = false) {
             const valueText = item.total_value_fe ? formatValue(item.total_value_fe) : '--';
             const iconHtml = getIconHtml(item.config_base_id, 'loot-icon');
 
+            const itemUrl = pickItemUrl(item) || ('https://titrack.ninja/item/' + item.config_base_id);
             return `
                 <div class="loot-item${negativeClass}">
                     ${iconHtml}
-                    <span class="loot-name">${escapeHtml(pickItemName(item))}</span>
+                    <a href="${itemUrl}" target="_blank" rel="noopener" class="loot-name item-name-link">${escapeHtml(pickItemName(item))}</a>
                     <span class="loot-qty">${qtyPrefix}${item.quantity}</span>
                     <span class="loot-value">${valueText}</span>
                 </div>
