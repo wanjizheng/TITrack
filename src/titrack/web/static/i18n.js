@@ -566,8 +566,24 @@
 
     function pickItemUrl(item) {
         if (!item) return null;
-        if (currentLang === 'zh-CN' && item.url_cn) return item.url_cn;
-        return item.url_en || null;
+        // Prefer DB-provided URLs, swapping /en/ <-> /cn/ based on current language
+        const wantCn = currentLang === 'zh-CN';
+        let url = wantCn ? (item.url_cn || item.url_en) : (item.url_en || item.url_cn);
+        if (url) {
+            if (wantCn) {
+                url = url.replace('/en/', '/cn/');
+            } else {
+                url = url.replace('/cn/', '/en/');
+            }
+            return url;
+        }
+        // Fallback: derive tlidb.com URL from English name (slug = name with spaces -> underscores)
+        const nameEn = item.name_en || item.name;
+        if (nameEn) {
+            const slug = encodeURIComponent(nameEn.trim().replace(/\s+/g, '_'));
+            return `https://tlidb.com/${wantCn ? 'cn' : 'en'}/${slug}`;
+        }
+        return null;
     }
 
     function pickSeasonName(player) {

@@ -265,11 +265,20 @@ class Database:
                 print("No items found in seed file")
                 return
 
-            # Batch insert items
+            # Batch upsert items: insert new rows, and for existing rows fill in
+            # only the fields that are currently NULL (preserve user edits and
+            # any non-NULL values already present).
             insert_sql = """
-                INSERT OR IGNORE INTO items
+                INSERT INTO items
                 (config_base_id, name_en, name_cn, type_cn, icon_url, url_en, url_cn)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(config_base_id) DO UPDATE SET
+                    name_en = COALESCE(items.name_en, excluded.name_en),
+                    name_cn = COALESCE(items.name_cn, excluded.name_cn),
+                    type_cn = COALESCE(items.type_cn, excluded.type_cn),
+                    icon_url = COALESCE(items.icon_url, excluded.icon_url),
+                    url_en = COALESCE(items.url_en, excluded.url_en),
+                    url_cn = COALESCE(items.url_cn, excluded.url_cn)
             """
 
             items_to_insert = []

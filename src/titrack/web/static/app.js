@@ -1990,7 +1990,7 @@ async function showRunDetails(runId) {
                         <li class="loot-item${itemIgnoredClass}" data-config-id="${item.config_base_id}">
                             <div class="loot-item-name">
                                 ${iconHtml}
-                                <span>${escapeHtml(pickItemName(item))}</span>
+                                <a href="${pickItemUrl(item) || ('https://titrack.ninja/item/' + item.config_base_id)}" target="_blank" rel="noopener" class="item-name-link">${escapeHtml(pickItemName(item))}</a>
                             </div>
                             <div class="loot-item-values">
                                 <span class="loot-item-qty ${item.total_value_fe !== null ? (item.total_value_fe > 0 ? 'positive' : 'negative') : ''}">${valueStr}</span>
