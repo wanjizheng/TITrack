@@ -12,6 +12,7 @@ dist/
 # Virtual environments
 venv/
 .venv/
+.venv-*/
 ENV/
 
 # IDE
@@ -38,3 +39,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 "CLAUDE.md" 
+
+# Local scratch files
+out.txt
