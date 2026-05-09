@@ -1,3 +1,4 @@
+using System;
 using System.Net.Http;
 using System.Text.Json;
 
@@ -129,6 +130,30 @@ internal static class Localization
         if (!string.IsNullOrEmpty(legacyName))
             return legacyName!;
         return Tr("overlay.unknown_item", configBaseId);
+    }
+
+    /// <summary>
+    /// Build a tlidb.com URL for a loot item in the active language. Prefers
+    /// DB-stored URLs (swapping /en/ &lt;-&gt; /cn/) and falls back to deriving
+    /// "https://tlidb.com/{en|cn}/&lt;NameWithUnderscores&gt;" from the English name.
+    /// Returns null when nothing usable is available.
+    /// </summary>
+    public static string? PickItemUrl(string? urlEn, string? urlCn, string? nameEn)
+    {
+        bool wantCn = CurrentLang == LangZh;
+        var url = wantCn
+            ? (!string.IsNullOrEmpty(urlCn) ? urlCn : urlEn)
+            : (!string.IsNullOrEmpty(urlEn) ? urlEn : urlCn);
+        if (!string.IsNullOrEmpty(url))
+        {
+            return wantCn ? url!.Replace("/en/", "/cn/") : url!.Replace("/cn/", "/en/");
+        }
+        if (!string.IsNullOrEmpty(nameEn))
+        {
+            var slug = Uri.EscapeDataString(nameEn!.Trim().Replace(' ', '_'));
+            return $"https://tlidb.com/{(wantCn ? "cn" : "en")}/{slug}";
+        }
+        return null;
     }
 
     /// <summary>

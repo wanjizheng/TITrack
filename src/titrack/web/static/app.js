@@ -1,7 +1,7 @@
 // TITrack Dashboard - Frontend Logic
 
 const API_BASE = '/api';
-const REFRESH_INTERVAL = 5000; // 5 seconds
+const REFRESH_INTERVAL = 2000; // 2 seconds
 
 let refreshTimer = null;
 let lastRunsData = null;

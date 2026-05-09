@@ -3,11 +3,13 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
 using System.Windows.Threading;
 
 namespace TITrackOverlay;
@@ -146,7 +148,9 @@ public partial class MainWindow : Window
         double? price_fe,
         double? total_value_fe,
         string? name_en = null,
-        string? name_cn = null
+        string? name_cn = null,
+        string? url_en = null,
+        string? url_cn = null
     );
 
     private record ActiveRunResponse(
@@ -1712,16 +1716,33 @@ public partial class MainWindow : Window
         Grid.SetColumn(iconImage, 0);
         grid.Children.Add(iconImage);
 
-        // Name
+        // Name (clickable link to tlidb.com)
+        var displayName = Localization.PickItemName(item.name_en, item.name_cn, item.name, item.config_base_id);
+        var itemUrl = Localization.PickItemUrl(item.url_en, item.url_cn, item.name_en);
         var nameText = new TextBlock
         {
-            Text = Localization.PickItemName(item.name_en, item.name_cn, item.name, item.config_base_id),
             Foreground = nameBrush,
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
             Effect = effect
         };
+        if (!string.IsNullOrEmpty(itemUrl))
+        {
+            var hyperlink = new Hyperlink(new Run(displayName))
+            {
+                Foreground = nameBrush,
+                TextDecorations = null,
+                NavigateUri = new Uri(itemUrl!),
+                Cursor = Cursors.Hand,
+            };
+            hyperlink.RequestNavigate += OnHyperlinkRequestNavigate;
+            nameText.Inlines.Add(hyperlink);
+        }
+        else
+        {
+            nameText.Text = displayName;
+        }
         Grid.SetColumn(nameText, 1);
         grid.Children.Add(nameText);
 
@@ -1769,6 +1790,23 @@ public partial class MainWindow : Window
         }
 
         return border;
+    }
+
+    private void OnHyperlinkRequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = e.Uri.AbsoluteUri,
+                UseShellExecute = true,
+            });
+        }
+        catch
+        {
+            // Ignore — opening browser is best-effort.
+        }
+        e.Handled = true;
     }
 
     private async void LoadIconAsync(int configBaseId, Image imageControl)

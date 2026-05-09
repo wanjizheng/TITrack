@@ -63,10 +63,15 @@ hiddenimports = [
     # in the packaged build when the user enables Cloud Sync.
     'supabase',
     'gotrue',
+    'supabase_auth',
     'postgrest',
     'realtime',
     'storage3',
     'supafunc',
+    'supabase_functions',
+    'h2',
+    'hpack',
+    'hyperframe',
 ]
 
 # Exclude unnecessary modules to reduce size

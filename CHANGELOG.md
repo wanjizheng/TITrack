@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Clickable item links in the overlay**: Item names in the overlay loot list are now hyperlinks that open the corresponding tlidb.com page in the default browser, matching the behavior of the dashboard inventory / run details / current run / loot report. Links automatically follow the active language (`/en/` vs `/cn/`) and fall back to deriving `https://tlidb.com/{en|cn}/<NameWithUnderscores>` from the item's English name when the database has no stored URL.
+
+### Changed
+- **Faster dashboard refresh**: The web dashboard now polls `/api/*` every 2 seconds instead of every 5 seconds, matching the overlay. Loot pickups, current-run value, and inventory now appear within ~2 s of being logged by the game (previously up to 5 s).
+- **Overlay loot list is no longer fully click-through**: The `SlimScrollViewer` template that hosts the loot list previously had `IsHitTestVisible="False"` on its content presenter. That was originally to let mouse clicks pass through to the game, but it also blocked the new item-name hyperlinks. Hit-testing is now enabled on the loot list. The header drag area and the stats grid remain click-through as before. Use the 🔒 (lock) button to make the entire overlay click-through again if you need it.
+
+### Fixed
+- **Cloud sync silently disabled in packaged builds**: The `/api/cloud/status` endpoint was returning `cloud_available: false` even with the toggle enabled, so queued price submissions never uploaded. Two root causes:
+  1. The `supabase` package wasn't installed in the build venv, so the EXE shipped without it.
+  2. supabase 2.30+ renamed two of its subpackages (`gotrue` → `supabase_auth`, `supafunc` → `supabase_functions`), but `ti_tracker.spec` still listed the old names as hidden imports. PyInstaller therefore didn't bundle the new packages even when they were installed.
+  Fixed by adding the new package names (and `h2`/`hpack`/`hyperframe` for the realtime websocket dependency) to `ti_tracker.spec` and ensuring `supabase>=2.0.0` is installed in the build environment before packaging.
+
+### Build notes
+
+To produce a working release build with cloud sync enabled, the build environment must include:
+
+```bash
+# Python 3.12 venv (Python 3.14 has no pythonnet wheel yet)
+py -3.12 -m venv .venv-build
+.\.venv-build\Scripts\Activate.ps1
+pip install -e .
+pip install pyinstaller "supabase>=2.0.0"
+
+# Build the WPF overlay (must be built before the main app)
+dotnet publish overlay/TITrackOverlay.csproj -c Release -o overlay/publish
+
+# Build the main EXE — picks up overlay/publish/TITrackOverlay.exe automatically
+python -m PyInstaller ti_tracker.spec --noconfirm
+```
+
+`ti_tracker.spec` hidden imports for cloud sync now include both old and new
+supabase package names so the same spec works against supabase 2.x ≤ 2.29 and
+supabase ≥ 2.30:
+
+```python
+'supabase', 'gotrue', 'supabase_auth',
+'postgrest', 'realtime', 'storage3',
+'supafunc', 'supabase_functions',
+'h2', 'hpack', 'hyperframe',
+```
+
+Verify the EXE actually shipped supabase by hitting `/api/cloud/status` after
+launch; `cloud_available` must be `true`.
+
 ---
 
 ## [0.5.9] - 2026-04-24

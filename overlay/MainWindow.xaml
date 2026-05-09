@@ -52,7 +52,7 @@
         </Style>
 
         <!-- ScrollViewer style with slim scrollbar -->
-        <!-- Content is click-through but scrollbar remains interactive -->
+        <!-- Content is interactive (so item-name hyperlinks receive clicks); scrollbar also interactive -->
         <Style x:Key="SlimScrollViewer" TargetType="ScrollViewer">
             <Setter Property="Template">
                 <Setter.Value>
@@ -62,7 +62,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <ScrollContentPresenter Grid.Column="0" IsHitTestVisible="False" />
+                            <ScrollContentPresenter Grid.Column="0" />
                             <ScrollBar x:Name="PART_VerticalScrollBar"
                                        Grid.Column="1"
                                        Style="{StaticResource SlimScrollBar}"
