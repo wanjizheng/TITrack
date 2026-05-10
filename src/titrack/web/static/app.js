@@ -729,7 +729,7 @@ function buildCostTooltip(costItems) {
     return escapeAttr(lines.join('\n'));
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', durationMs) {
     // Create toast container if it doesn't exist
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -748,8 +748,10 @@ function showToast(message, type = 'info') {
     // Trigger animation
     setTimeout(() => toast.classList.add('show'), 10);
 
-    // Warning toasts stay longer (15s vs 3s)
-    const duration = type === 'warning' ? 15000 : 3000;
+    // Warning toasts stay longer (15s vs 3s); allow callers to override.
+    const duration = durationMs != null
+        ? durationMs
+        : (type === 'warning' ? 15000 : 3000);
 
     // Remove after delay
     setTimeout(() => {
@@ -3092,9 +3094,23 @@ function renderVersion(status) {
 }
 
 async function checkForUpdates() {
+    // Immediate visual feedback so the user knows the click registered,
+    // regardless of how fast the backend responds.
+    const checkBtn = document.getElementById('check-updates-btn');
+    if (checkBtn) {
+        checkBtn.disabled = true;
+        checkBtn.textContent = 'Checking...';
+        checkBtn.classList.remove('update-available', 'update-ready');
+    }
+
     const status = await fetchUpdateStatus();
 
     if (status && (status.status === 'available' || status.status === 'ready')) {
+        // renderVersion in the modal flow will reset the button text.
+        if (checkBtn) {
+            checkBtn.disabled = false;
+            renderVersion(status);
+        }
         showUpdateModal(status);
         return;
     }
@@ -3121,9 +3137,24 @@ function startUpdateStatusPolling() {
             if (status.status === 'available') {
                 showUpdateModal(status);
             } else if (status.status === 'up_to_date') {
-                showToast(`You're on the latest version (v${status.current_version})`, 'success');
+                // Flash an "Up to date" state on the button itself so the
+                // feedback is visible right where the user clicked, in
+                // addition to the corner toast.
+                const checkBtn = document.getElementById('check-updates-btn');
+                if (checkBtn) {
+                    checkBtn.textContent = '✓ Up to date';
+                    checkBtn.disabled = true;
+                    setTimeout(() => renderVersion(updateStatus), 2500);
+                }
+                showToast(`You're on the latest version (v${status.current_version})`, 'success', 5000);
             } else if (status.status === 'error') {
-                showToast('Update check failed: ' + (status.error_message || 'Unknown error'), 'error');
+                const checkBtn = document.getElementById('check-updates-btn');
+                if (checkBtn) {
+                    checkBtn.textContent = 'Check failed';
+                    checkBtn.disabled = true;
+                    setTimeout(() => renderVersion(updateStatus), 3000);
+                }
+                showToast('Update check failed: ' + (status.error_message || 'Unknown error'), 'error', 6000);
             }
         }
     }, 1000);
