@@ -10,7 +10,7 @@ let lastRunsHash = null;
 let lastInventoryHash = null;
 let lastStatsHash = null;
 let lastPlayerHash = null;
-const failedIcons = new Set(); // Track icons that failed to load
+const failedIcons = new Map(); // configId -> timestamp of last failure
 
 // Chart instances
 let cumulativeValueChart = null;
@@ -899,11 +899,12 @@ function renderActiveRun(data, forceRender = false) {
         return;
     }
 
-    // Check if data changed (include cost data in hash)
+    // Check if data changed (exclude duration - it changes every tick and
+    // is updated separately below; including it forces a full DOM rebuild
+    // every 2s which cancels in-flight icon image requests).
     const newHash = simpleHash({
         id: data.id,
         val: data.total_value,
-        dur: data.duration_seconds,
         loot: data.loot?.length,
         cost: data.map_cost_fe
     });
@@ -1753,6 +1754,8 @@ async function saveLogDirectory() {
 
 // Chart configuration - base options shared by both modes
 function getChartOptions(realtimeMode) {
+    const gridColor = 'rgba(255, 255, 255, 0.045)';
+    const tickColor = '#9aa1b8';
     const xScale = realtimeMode ? {
         type: 'time',
         time: {
@@ -1762,20 +1765,26 @@ function getChartOptions(realtimeMode) {
             },
         },
         grid: {
-            color: 'rgba(42, 42, 74, 0.5)',
+            color: gridColor,
+            drawBorder: false,
         },
+        border: { display: false },
         ticks: {
-            color: '#a0a0a0',
+            color: tickColor,
             maxTicksLimit: 6,
+            font: { size: 11 },
         },
     } : {
         type: 'linear',
         grid: {
-            color: 'rgba(42, 42, 74, 0.5)',
+            color: gridColor,
+            drawBorder: false,
         },
+        border: { display: false },
         ticks: {
-            color: '#a0a0a0',
+            color: tickColor,
             maxTicksLimit: 6,
+            font: { size: 11 },
             callback: function(value) {
                 const hours = Math.floor(value);
                 const minutes = Math.round((value - hours) * 60);
@@ -1797,11 +1806,42 @@ function getChartOptions(realtimeMode) {
                 display: false,
             },
             tooltip: {
-                backgroundColor: 'rgba(22, 33, 62, 0.9)',
-                titleColor: '#eaeaea',
-                bodyColor: '#eaeaea',
-                borderColor: '#2a2a4a',
+                backgroundColor: 'rgba(17, 20, 31, 0.95)',
+                titleColor: '#eef0f6',
+                bodyColor: '#eef0f6',
+                borderColor: 'rgba(255, 255, 255, 0.08)',
                 borderWidth: 1,
+                padding: 10,
+                cornerRadius: 8,
+                displayColors: false,
+                titleFont: { weight: '600' },
+            },
+            zoom: {
+                pan: {
+                    enabled: true,
+                    mode: 'x',
+                    modifierKey: 'shift',
+                },
+                zoom: {
+                    wheel: {
+                        enabled: true,
+                        speed: 0.1,
+                    },
+                    pinch: {
+                        enabled: true,
+                    },
+                    drag: {
+                        enabled: true,
+                        modifierKey: 'ctrl',
+                        backgroundColor: 'rgba(233, 69, 96, 0.15)',
+                        borderColor: 'rgba(233, 69, 96, 0.6)',
+                        borderWidth: 1,
+                    },
+                    mode: 'x',
+                },
+                limits: {
+                    x: { minRange: 0.05 },
+                },
             },
         },
         scales: {
@@ -1809,14 +1849,33 @@ function getChartOptions(realtimeMode) {
             y: {
                 beginAtZero: true,
                 grid: {
-                    color: 'rgba(42, 42, 74, 0.5)',
+                    color: gridColor,
+                    drawBorder: false,
                 },
+                border: { display: false },
                 ticks: {
-                    color: '#a0a0a0',
+                    color: tickColor,
+                    font: { size: 11 },
                 },
             },
         },
     };
+}
+
+// Build a vertical canvas gradient from a hex color (top -> transparent)
+function buildLineGradient(ctx, hex) {
+    const canvas = ctx.canvas || ctx;
+    const c = canvas.getContext ? canvas.getContext('2d') : ctx.getContext('2d');
+    const h = canvas.height || 200;
+    const grad = c.createLinearGradient(0, 0, 0, h);
+    // hex like #e94560
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.32)`);
+    grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, 0.08)`);
+    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    return grad;
 }
 
 function formatElapsedTime(hours) {
@@ -1869,17 +1928,23 @@ function renderCharts(data, forceRender = false) {
             cumulativeValueChart.data.datasets[0].data = cumulativeValueData;
             cumulativeValueChart.update('none');
         } else {
+            cumulativeValueCtx.ondblclick = () => cumulativeValueChart && cumulativeValueChart.resetZoom();
+            cumulativeValueCtx.title = 'Wheel to zoom · Shift+drag to pan · Double-click to reset';
             cumulativeValueChart = new Chart(cumulativeValueCtx, {
                 type: 'line',
                 data: {
                     datasets: [{
                         data: cumulativeValueData,
                         borderColor: '#e94560',
-                        backgroundColor: 'rgba(233, 69, 96, 0.1)',
+                        backgroundColor: buildLineGradient(cumulativeValueCtx, '#e94560'),
+                        borderWidth: 2,
                         fill: true,
-                        tension: 0.3,
-                        pointRadius: 2,
+                        tension: 0.35,
+                        pointRadius: 0,
                         pointHoverRadius: 5,
+                        pointHoverBackgroundColor: '#e94560',
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2,
                     }],
                 },
                 options: {
@@ -1906,17 +1971,23 @@ function renderCharts(data, forceRender = false) {
             valueRateChart.data.datasets[0].data = valueRateData;
             valueRateChart.update('none');
         } else {
+            valueRateCtx.ondblclick = () => valueRateChart && valueRateChart.resetZoom();
+            valueRateCtx.title = 'Wheel to zoom · Shift+drag to pan · Double-click to reset';
             valueRateChart = new Chart(valueRateCtx, {
                 type: 'line',
                 data: {
                     datasets: [{
                         data: valueRateData,
                         borderColor: '#4ecca3',
-                        backgroundColor: 'rgba(78, 204, 163, 0.1)',
+                        backgroundColor: buildLineGradient(valueRateCtx, '#4ecca3'),
+                        borderWidth: 2,
                         fill: true,
-                        tension: 0.3,
-                        pointRadius: 2,
+                        tension: 0.35,
+                        pointRadius: 0,
                         pointHoverRadius: 5,
+                        pointHoverBackgroundColor: '#4ecca3',
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2,
                     }],
                 },
                 options: {
@@ -2567,31 +2638,37 @@ function renderLootReportChart(data) {
             datasets: [{
                 data: values,
                 backgroundColor: colors.slice(0, labels.length),
-                borderColor: 'rgba(22, 33, 62, 0.8)',
+                borderColor: 'rgba(24, 28, 44, 0.95)',
                 borderWidth: 2,
+                hoverOffset: 6,
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            cutout: '68%',
             plugins: {
                 legend: {
                     position: 'right',
                     labels: {
-                        color: '#a0a0a0',
-                        padding: 8,
+                        color: '#9aa1b8',
+                        padding: 10,
                         usePointStyle: true,
+                        pointStyle: 'circle',
                         font: {
                             size: 11,
                         }
                     }
                 },
                 tooltip: {
-                    backgroundColor: 'rgba(22, 33, 62, 0.9)',
-                    titleColor: '#eaeaea',
-                    bodyColor: '#eaeaea',
-                    borderColor: '#2a2a4a',
+                    backgroundColor: 'rgba(17, 20, 31, 0.95)',
+                    titleColor: '#eef0f6',
+                    bodyColor: '#eef0f6',
+                    borderColor: 'rgba(255, 255, 255, 0.08)',
                     borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false,
                     callbacks: {
                         label: function(ctx) {
                             const value = ctx.parsed;
@@ -2696,65 +2773,74 @@ document.getElementById('help-modal').addEventListener('click', (e) => {
 
 async function refreshAll(forceRender = false) {
     try {
-        const [status, stats, runs, inventory, statsHistory, player, cloudStatus, activeRun] = await Promise.all([
-            fetchStatus(),
-            fetchStats(),
-            fetchRuns(),
-            fetchInventory(),
-            fetchStatsHistory(24),
-            fetchPlayer(),
-            fetchCloudStatus(),
-            fetchActiveRun()
-        ]);
+        // Fire all fetches in parallel, but render each as soon as it resolves.
+        // This prevents a slow request (e.g., 24h stats history, cloud status)
+        // from delaying the high-priority "current map" panel.
+        const statusP = fetchStatus();
+        const statsP = fetchStats();
+        const runsP = fetchRuns();
+        const inventoryP = fetchInventory();
+        const statsHistoryP = fetchStatsHistory(24);
+        const playerP = fetchPlayer();
+        const cloudStatusP = fetchCloudStatus();
+        const activeRunP = fetchActiveRun();
 
-        lastRunsData = runs;
-        lastInventoryData = inventory;
+        // High-priority: active run + status render the moment they're back
+        activeRunP.then(activeRun => renderActiveRun(activeRun, forceRender))
+            .catch(err => console.error('renderActiveRun failed:', err));
+        statusP.then(status => renderStatus(status))
+            .catch(err => console.error('renderStatus failed:', err));
 
-        renderStatus(status);
-        renderStats(stats, inventory);
-        renderCloudStatus(cloudStatus);
-        renderActiveRun(activeRun, forceRender);
+        // Stats card needs both stats + inventory
+        Promise.all([statsP, inventoryP]).then(([stats, inventory]) => {
+            lastInventoryData = inventory;
+            renderStats(stats, inventory);
+        }).catch(err => console.error('renderStats failed:', err));
 
-        // Filter out active/incomplete runs from recent runs list
-        // A run is complete if it has end_ts set
-        let filteredRuns = runs;
-        if (runs?.runs) {
-            filteredRuns = {
-                ...runs,
-                runs: runs.runs.filter(r => r.end_ts != null)
-            };
-        }
-        renderRuns(filteredRuns, forceRender);
-
-        // Load cloud prices if sync is enabled
-        if (cloudStatus && cloudStatus.enabled && Object.keys(cloudPricesCache).length === 0) {
-            await loadCloudPrices();
-        }
-
-        renderInventory(inventory, forceRender);
-        renderCharts(statsHistory, forceRender);
-
-        // Check low supply alerts after inventory is rendered
-        await checkLowSupplyAlerts();
-
-        // Check if player changed and update display
-        const playerHash = simpleHash(player);
-        if (forceRender || playerHash !== lastPlayerHash) {
-            renderPlayer(player);
-            lastPlayerHash = playerHash;
-
-            // Reload per-player data when player changes
-            hiddenItemIds = await fetchHiddenItems();
-            updateHideItemsButton();
-
-            // Clear supply alert state on player change
-            supplyAlertedCategories.clear();
-
-            // Auto-close no-character modal when character is detected
-            if (player && noCharacterModalShown) {
-                closeNoCharacterModal();
+        cloudStatusP.then(async cloudStatus => {
+            renderCloudStatus(cloudStatus);
+            if (cloudStatus && cloudStatus.enabled && Object.keys(cloudPricesCache).length === 0) {
+                await loadCloudPrices();
+                // Re-render inventory + stats now that cloud prices are
+                // available, so the very first paint isn't missing them.
+                const inv = await inventoryP;
+                renderInventory(inv, true);
+                const st = await statsP;
+                renderStats(st, inv);
             }
-        }
+        }).catch(err => console.error('renderCloudStatus failed:', err));
+
+        runsP.then(runs => {
+            lastRunsData = runs;
+            let filteredRuns = runs;
+            if (runs?.runs) {
+                filteredRuns = { ...runs, runs: runs.runs.filter(r => r.end_ts != null) };
+            }
+            renderRuns(filteredRuns, forceRender);
+        }).catch(err => console.error('renderRuns failed:', err));
+
+        inventoryP.then(inventory => renderInventory(inventory, forceRender))
+            .catch(err => console.error('renderInventory failed:', err));
+
+        statsHistoryP.then(statsHistory => renderCharts(statsHistory, forceRender))
+            .catch(err => console.error('renderCharts failed:', err));
+
+        inventoryP.then(() => checkLowSupplyAlerts())
+            .catch(err => console.error('checkLowSupplyAlerts failed:', err));
+
+        playerP.then(async player => {
+            const playerHash = simpleHash(player);
+            if (forceRender || playerHash !== lastPlayerHash) {
+                renderPlayer(player);
+                lastPlayerHash = playerHash;
+                hiddenItemIds = await fetchHiddenItems();
+                updateHideItemsButton();
+                supplyAlertedCategories.clear();
+                if (player && noCharacterModalShown) {
+                    closeNoCharacterModal();
+                }
+            }
+        }).catch(err => console.error('renderPlayer failed:', err));
 
         updateLastRefresh();
     } catch (error) {
@@ -2883,19 +2969,26 @@ function simpleHash(obj) {
 }
 
 function handleIconError(img) {
-    // Track failed icon and hide it
+    // Track failed icon and hide it. Failures expire after a TTL so the
+    // next render retries (handles flaky first-load network on the proxy).
     if (img.dataset.configId) {
-        failedIcons.add(img.dataset.configId);
+        failedIcons.set(String(img.dataset.configId), Date.now());
     }
     img.style.display = 'none';
 }
 
+const ICON_RETRY_MS = 60000;
+
 function getIconHtml(configBaseId, cssClass) {
-    // Don't render icons that have previously failed
-    if (!configBaseId || failedIcons.has(String(configBaseId))) {
+    if (!configBaseId) return '';
+    const key = String(configBaseId);
+    const failedAt = failedIcons.get ? failedIcons.get(key) : null;
+    if (failedAt && (Date.now() - failedAt) < ICON_RETRY_MS) {
         return '';
     }
-    // Use proxy endpoint to fetch icons (handles CDN headers server-side)
+    if (failedAt) {
+        failedIcons.delete(key);
+    }
     const proxyUrl = `/api/icons/${configBaseId}`;
     return `<img src="${proxyUrl}" alt="" class="${cssClass}" data-config-id="${configBaseId}" onerror="handleIconError(this)">`;
 }
